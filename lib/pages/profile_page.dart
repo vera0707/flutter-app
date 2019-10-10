@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
-import '../constants/constants.dart' show AppColors;
+import 'package:flutter_app/utils/data_util.dart';
+import 'package:flutter_app/utils/net_util.dart';
+import '../constants/constants.dart' show AppColors,AppUrls;
+import 'package:flutter_app/pages/login_web_page.dart';
+import '../common/event_bus.dart';
 
 class ProfilePage extends StatefulWidget {
   @override
@@ -31,14 +35,25 @@ class _ProfilePageState extends State<ProfilePage> {
   String _userName;
 
   @override
+  void initState() {
+    // TODO: implement initState
+    super.initState();
+
+    // 尝试显示用户信息
+    eventBus.on<LoginEvent>().listen((event){
+      // 获取用户信息
+      _getUserInfo();
+    });
+  }
+  
+
+  @override
   Widget build(BuildContext context) {
     return ListView.separated(
       itemCount: menuTitle.length+1,
       itemBuilder: (context,index){
         if(index == 0){
-          return Container(
-            child: _buildHeader(),
-          );
+          return _buildHeader();
         }
         index -= 1;
         return ListTile(
@@ -68,6 +83,13 @@ class _ProfilePageState extends State<ProfilePage> {
             GestureDetector(
               onTap: (){
                 print('点击登录');
+                DataUtil.isLogin().then((isLogin){
+                  if(isLogin){
+                    print('跳转进详情页');
+                  }else{
+                    _login();
+                  } 
+                });
               },
               child: Container(
                 width: 60.0,
@@ -79,7 +101,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     width: 2.0
                   ),
                   image: DecorationImage(
-                    image: AssetImage('images/ic_avatar_default.png',),
+                    image: _userName == null ? AssetImage('images/ic_avatar_default.png',) : NetworkImage(_userAvatar),
                     fit: BoxFit.fill,
                   )
                 ),
@@ -90,5 +112,39 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
       ),
     );
+  }
+
+  _login() async{
+    Navigator.push(context,MaterialPageRoute(
+      builder: (context)=> LoginWebPage(),
+    )).then((value){
+      if(value == 'refresh'){
+        print('登录成功');
+        eventBus.fire(LoginEvent());
+      }
+    });
+  }
+
+  _getUserInfo() async{
+    DataUtil.getAccessToken().then((token){
+      if(token == null && token.length == 0) return;
+      Map<String,dynamic> params = Map<String,dynamic>();
+      params['access_token'] = token;
+      params['dataType'] = 'json';
+      NetUtil.get(AppUrls.OPENAPI_USER, params).then((data){
+        print(data);
+        if(mounted){
+          setState(() {
+            _userAvatar = data['avatar'];
+            _userName = data['name'];
+          });
+        }
+
+        DataUtil.saveUser(data).then((user){
+          print(user.name);
+          print(user.avatar);
+        });
+      });
+    });
   }
 }
